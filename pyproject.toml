@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recursive-partition-classifier"
+version = "0.1.0"
+description = "Scikit-learn compatible recursive partitioning classifiers"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "joblib>=1.2",
+    "numpy>=1.22",
+    "scikit-learn>=1.1",
+    "scipy>=1.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+include = ["recursive_partition*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
