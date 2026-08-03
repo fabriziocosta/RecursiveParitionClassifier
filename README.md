@@ -682,6 +682,15 @@ Run the included executable example with:
 python examples/plot_two_moons.py
 ```
 
+The same demonstration is available as an interactive notebook at
+[`notebooks/two_moons_demo.ipynb`](notebooks/two_moons_demo.ipynb). Install its
+optional plotting and Jupyter dependencies with:
+
+```bash
+python -m pip install -e '.[demo]'
+jupyter notebook notebooks/two_moons_demo.ipynb
+```
+
 It uses the requested 600-sample, noise-0.22 dataset and stratified 70/30
 split, and reports the measured test accuracy in each plot title. Exact
 accuracy depends on the installed scikit-learn version and estimator
