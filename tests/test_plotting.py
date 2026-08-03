@@ -19,7 +19,9 @@ def test_multiclass_probability_heatmap():
         base_estimator=LogisticRegression(max_iter=500),
         max_depth=3,
     ).fit(X, y)
-    figure = plot_probability_heatmap(model, X, y, grid_size=20)
-    assert len(figure.axes) == 2
+    figure, axes = plt.subplots(1, 2, figsize=(8, 4))
+    plot_probability_heatmap(model, X, y, ax=axes[0], colorbar=False, grid_size=20)
+    plot_probability_heatmap(model, X, y, ax=axes[1], colorbar=True, grid_size=20)
+    assert len(figure.axes) == 3
     assert np.isfinite(model.predict_proba(X)).all()
     plt.close(figure)
