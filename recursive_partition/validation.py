@@ -9,15 +9,24 @@ import numpy as np
 from sklearn.utils.multiclass import check_classification_targets, type_of_target, unique_labels
 
 
-def validate_binary_targets(y: Any) -> np.ndarray:
-    """Validate classification targets and return their two ordered labels."""
+def validate_classification_targets(y: Any) -> np.ndarray:
+    """Validate binary or multiclass targets and return ordered labels."""
 
     check_classification_targets(y)
-    if type_of_target(y) != "binary":
-        raise ValueError("Recursive partition classifiers require exactly two classes.")
+    if type_of_target(y) not in {"binary", "multiclass"}:
+        raise ValueError("Recursive partition classifiers require binary or multiclass targets.")
     classes = unique_labels(y)
+    if len(classes) < 2:
+        raise ValueError("Recursive partition classifiers require at least two classes.")
+    return classes
+
+
+def validate_binary_targets(y: Any) -> np.ndarray:
+    """Backward-compatible validator for callers that explicitly need binary labels."""
+
+    classes = validate_classification_targets(y)
     if len(classes) != 2:
-        raise ValueError("Recursive partition classifiers require exactly two classes.")
+        raise ValueError("This operation requires exactly two classes.")
     return classes
 
 
@@ -46,4 +55,3 @@ def validate_sample_weight(sample_weight: Any, n_samples: int) -> np.ndarray:
     if not np.any(weights > 0):
         raise ValueError("sample_weight must contain at least one positive value.")
     return weights
-

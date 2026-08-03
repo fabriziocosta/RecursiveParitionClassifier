@@ -1,7 +1,13 @@
 import numpy as np
 from sklearn.svm import SVC
 
-from recursive_partition import BaggedRecursivePartitionClassifier, RecursivePartitionClassifier
+from sklearn.linear_model import LogisticRegression
+
+from recursive_partition import (
+    BaggedRecursivePartitionClassifier,
+    RecursivePartitionClassifier,
+    make_2d_dataset,
+)
 
 
 def data():
@@ -65,3 +71,22 @@ def test_each_member_gets_its_independent_seed():
     member_seeds = np.asarray([estimator.base_estimator_.random_state for estimator in model.estimators_])
     np.testing.assert_array_equal(member_seeds, model.estimator_seeds_)
     assert len(np.unique(member_seeds)) == len(member_seeds)
+
+
+def test_multiclass_bagging_probabilities_and_oob_shape():
+    X, y = make_2d_dataset("blobs", n_samples=180, n_classes=3, random_state=12)
+    estimator = RecursivePartitionClassifier(base_estimator=LogisticRegression(max_iter=500))
+    model = BaggedRecursivePartitionClassifier(
+        estimator=estimator,
+        n_estimators=4,
+        random_state=42,
+        n_jobs=1,
+        oob_score=True,
+    ).fit(X, y)
+    probabilities = model.predict_proba(X)
+    assert model.classes_.shape == (3,)
+    assert probabilities.shape == (len(y), 3)
+    assert model.oob_decision_function_.shape == (len(y), 3)
+    np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
+    assert model.predict(X).shape == y.shape
+    assert all(len(np.unique(y[indices])) == 3 for indices in model.estimators_samples_)

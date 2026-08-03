@@ -11,7 +11,7 @@ from sklearn.utils import check_array, check_X_y, check_random_state
 from sklearn.utils.validation import check_is_fitted
 
 from .tree import RecursivePartitionClassifier
-from .validation import validate_binary_targets, validate_sample_weight
+from .validation import validate_classification_targets, validate_sample_weight
 
 
 def _fit_member(template, X, y, indices, seed, sample_weight):
@@ -64,7 +64,8 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
 
     def fit(self, X, y, sample_weight=None):
         X, y = check_X_y(X, y, accept_sparse=["csr", "csc"], dtype=None)
-        self.classes_ = validate_binary_targets(y)
+        self.classes_ = validate_classification_targets(y)
+        self.n_classes_ = len(self.classes_)
         self.n_features_in_ = X.shape[1]
         if sample_weight is not None:
             sample_weight = validate_sample_weight(sample_weight, X.shape[0])
@@ -103,7 +104,8 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
             n_jobs=self.n_jobs if self.n_estimators > 2 else 1,
             prefer="processes",
         )(
-            delayed(_member_proba)(estimator, X) for estimator in self.estimators_
+            delayed(_member_proba)(estimator, X, self.n_classes_)
+            for estimator in self.estimators_
         )
         result = np.mean(np.asarray(probabilities), axis=0)
         result = np.maximum(result, 0.0)
@@ -134,25 +136,30 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
 
     def _draw_indices(self, rng, y, sample_size):
         classes = self.classes_
-        if sample_size < 2:
-            raise ValueError("At least two samples are required to ensure both classes in each member.")
+        if sample_size < len(classes):
+            raise ValueError(
+                "max_samples must be at least the number of classes so every member "
+                "contains every class."
+            )
         if self.bootstrap:
-            indices = rng.randint(len(y), size=sample_size)
-            if not np.any(y[indices] == classes[0]):
-                indices[0] = rng.choice(np.flatnonzero(y == classes[0]))
-            if not np.any(y[indices] == classes[1]):
-                replace_at = 1 if indices[0] != indices[1] or sample_size > 2 else 0
-                indices[replace_at] = rng.choice(np.flatnonzero(y == classes[1]))
+            indices = np.concatenate(
+                [
+                    np.asarray([rng.choice(np.flatnonzero(y == class_value))])
+                    for class_value in classes
+                ]
+                + ([rng.randint(len(y), size=sample_size - len(classes))] if sample_size > len(classes) else [])
+            )
+            rng.shuffle(indices)
             return np.asarray(indices, dtype=int)
-        if sample_size < 2:
-            raise ValueError("At least two samples are required for a binary no-replacement sample.")
-        first = rng.choice(np.flatnonzero(y == classes[0]))
-        second = rng.choice(np.flatnonzero(y == classes[1]))
-        remaining_pool = np.setdiff1d(np.arange(len(y)), np.asarray([first, second]), assume_unique=False)
-        if sample_size > len(remaining_pool) + 2:
+        mandatory = np.asarray(
+            [rng.choice(np.flatnonzero(y == class_value)) for class_value in classes],
+            dtype=int,
+        )
+        remaining_pool = np.setdiff1d(np.arange(len(y)), mandatory, assume_unique=False)
+        if sample_size > len(remaining_pool) + len(mandatory):
             raise ValueError("max_samples is too large for sampling without replacement.")
-        remainder = rng.choice(remaining_pool, size=sample_size - 2, replace=False)
-        indices = np.concatenate(([first, second], remainder))
+        remainder = rng.choice(remaining_pool, size=sample_size - len(mandatory), replace=False)
+        indices = np.concatenate((mandatory, remainder))
         rng.shuffle(indices)
         return indices.astype(int)
 
@@ -163,7 +170,7 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         return np.flatnonzero(~in_bag)
 
     def _compute_oob_score(self, X, y):
-        sums = np.zeros((len(y), 2), dtype=float)
+        sums = np.zeros((len(y), self.n_classes_), dtype=float)
         counts = np.zeros(len(y), dtype=int)
         for estimator, indices in zip(self.estimators_, self.oob_indices_):
             if len(indices) == 0:
@@ -178,8 +185,10 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         self.oob_counts_ = counts
 
 
-def _member_proba(estimator, X):
+def _member_proba(estimator, X, n_classes):
     result = np.asarray(estimator.predict_proba(X), dtype=float)
-    if result.ndim != 2 or result.shape[1] != 2:
-        raise ValueError("Each ensemble estimator must return a two-column predict_proba result.")
+    if result.ndim != 2 or result.shape[1] != n_classes:
+        raise ValueError(
+            f"Each ensemble estimator must return a {n_classes}-column predict_proba result."
+        )
     return result

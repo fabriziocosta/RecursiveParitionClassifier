@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -16,6 +16,7 @@ class _Node:
     class_counts: np.ndarray
     predicted_class_index: int
     estimator: Optional[Any] = None
+    children: Dict[int, "_Node"] = field(default_factory=dict)
     negative_child: Optional["_Node"] = None
     positive_child: Optional["_Node"] = None
     is_leaf: bool = True
@@ -25,4 +26,3 @@ class _Node:
         """Return the smoothed probability vector assigned by the owning tree."""
 
         raise AttributeError("leaf_probability is computed by the owning classifier")
-

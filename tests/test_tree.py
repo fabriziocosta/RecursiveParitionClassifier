@@ -9,7 +9,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
-from recursive_partition import RecursivePartitionClassifier
+from recursive_partition import RecursivePartitionClassifier, make_2d_dataset
 
 
 def data():
@@ -74,6 +74,17 @@ def test_estimator_plugins(estimator):
     X, y = data()
     model = RecursivePartitionClassifier(base_estimator=estimator).fit(X, y)
     assert model.predict(X).shape == y.shape
+
+
+def test_multiclass_fit_prediction_and_probabilities():
+    X, y = make_2d_dataset("blobs", n_samples=180, n_classes=3, random_state=12)
+    model = RecursivePartitionClassifier(base_estimator=LogisticRegression(max_iter=500)).fit(X, y)
+    probabilities = model.predict_proba(X)
+    assert model.classes_.shape == (3,)
+    assert model.predict(X).shape == y.shape
+    assert probabilities.shape == (len(y), 3)
+    np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
+    assert all(len(node.children) >= 2 for node in model.nodes_ if not node.is_leaf)
 
 
 def test_batched_traversal_matches_predict():

@@ -13,11 +13,15 @@ from sklearn.utils import check_array, check_X_y
 from sklearn.utils.validation import check_is_fitted
 
 from ._node import _Node
-from .validation import supports_sample_weight, validate_binary_targets, validate_sample_weight
+from .validation import (
+    supports_sample_weight,
+    validate_classification_targets,
+    validate_sample_weight,
+)
 
 
 class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
-    """A classifier-driven recursive top-down binary partitioner.
+    """A classifier-driven recursive top-down partitioner.
 
     Each non-leaf node fits a fresh clone of ``base_estimator`` on the true
     labels belonging to that node. The estimator's predictions define the two
@@ -51,7 +55,8 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         """Fit the recursive partitioner and return ``self``."""
 
         X, y = check_X_y(X, y, accept_sparse=["csr", "csc"], dtype=None)
-        self.classes_ = validate_binary_targets(y)
+        self.classes_ = validate_classification_targets(y)
+        self.n_classes_ = len(self.classes_)
         self.n_features_in_ = X.shape[1]
         if hasattr(X, "columns"):
             self.feature_names_in_ = np.asarray(X.columns, dtype=object)
@@ -93,11 +98,13 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
                 predicted = np.asarray(estimator.predict(X_node)).reshape(-1)
                 if predicted.shape[0] != indices.shape[0]:
                     raise ValueError("base_estimator.predict returned the wrong number of labels")
-                negative = self._matches_label(predicted, self.classes_[0])
-                positive = self._matches_label(predicted, self.classes_[1])
-                if np.any(~(negative | positive)):
+                predicted_indices = self._class_indices(predicted)
+                if np.any(predicted_indices < 0):
                     raise ValueError("base_estimator.predict returned an unknown class label")
-                if not np.any(negative) or not np.any(positive):
+                predicted_classes = np.unique(predicted_indices)
+                if len(predicted_classes) < 2:
+                    continue
+                if self.max_nodes is not None and len(self.nodes_) + len(predicted_classes) > self.max_nodes:
                     continue
             except Exception as exc:
                 self._handle_fit_failure(exc, node)
@@ -105,16 +112,19 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
 
             node.estimator = estimator
             node.is_leaf = False
-            negative_indices = indices[negative]
-            positive_indices = indices[positive]
-            node.negative_child = self._make_node(
-                len(self.nodes_), node.depth + 1, negative_indices, y, sample_weight
-            )
-            node.positive_child = self._make_node(
-                len(self.nodes_), node.depth + 1, positive_indices, y, sample_weight
-            )
-            stack.append((node.positive_child, positive_indices))
-            stack.append((node.negative_child, negative_indices))
+            node.children = {}
+            for class_index in predicted_classes:
+                child_indices = indices[predicted_indices == class_index]
+                child = self._make_node(
+                    len(self.nodes_), node.depth + 1, child_indices, y, sample_weight
+                )
+                node.children[int(class_index)] = child
+            if self.n_classes_ == 2:
+                node.negative_child = node.children.get(0)
+                node.positive_child = node.children.get(1)
+            for class_index in predicted_classes[::-1]:
+                child_indices = indices[predicted_indices == class_index]
+                stack.append((node.children[int(class_index)], child_indices))
 
         self.n_nodes_ = len(self.nodes_)
         self.max_depth_ = max(node.depth for node in self.nodes_)
@@ -128,7 +138,7 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         return self.classes_[np.fromiter((node.predicted_class_index for node in leaves), dtype=int)]
 
     def predict_proba(self, X):
-        """Return two-class probabilities using leaf frequencies or routing probabilities."""
+        """Return class probabilities using leaf frequencies or routing probabilities."""
 
         leaves, base_probabilities, sample_leaf_ids = self._traverse(
             X, collect_base_probabilities=self.probability_mode == "base_estimator"
@@ -143,7 +153,7 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         invalid = ~np.isfinite(normalizers) | (normalizers <= 0)
         probabilities[~invalid] /= normalizers[~invalid, None]
         if np.any(invalid):
-            probabilities[invalid] = 0.5
+            probabilities[invalid] = 1.0 / self.n_classes_
         return probabilities
 
     def apply(self, X):
@@ -212,10 +222,10 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
     def _make_node(self, node_id, depth, indices, y, sample_weight):
         if sample_weight is None:
             counts = np.bincount(
-                np.searchsorted(self.classes_, y[indices]), minlength=2
+                self._class_indices(y[indices]), minlength=self.n_classes_
             ).astype(float)
         else:
-            counts = np.zeros(2, dtype=float)
+            counts = np.zeros(self.n_classes_, dtype=float)
             for class_index, class_value in enumerate(self.classes_):
                 counts[class_index] = sample_weight[indices][self._matches_label(y[indices], class_value)].sum()
         predicted_class_index = int(np.argmax(counts))
@@ -242,9 +252,20 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         except (TypeError, ValueError):
             return np.fromiter((value == label for value in values), dtype=bool, count=len(values))
 
+    def _class_indices(self, values):
+        """Map arbitrary class labels to positions in ``classes_``."""
+
+        values = np.asarray(values).reshape(-1)
+        indices = np.full(len(values), -1, dtype=int)
+        for class_index, class_value in enumerate(self.classes_):
+            indices[self._matches_label(values, class_value)] = class_index
+        return indices
+
     def _leaf_probability(self, node):
         alpha = float(self.probability_smoothing)
-        return (node.class_counts + alpha) / (node.class_counts.sum() + 2.0 * alpha)
+        return (node.class_counts + alpha) / (
+            node.class_counts.sum() + self.n_classes_ * alpha
+        )
 
     def _traverse(self, X, collect_base_probabilities=False, return_path=False):
         check_is_fitted(self, "tree_")
@@ -254,7 +275,7 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         n_samples = X.shape[0]
         leaves: List[Optional[_Node]] = [None] * n_samples
         leaf_ids = np.empty(n_samples, dtype=int)
-        base_probabilities = np.full((n_samples, 2), np.nan, dtype=float)
+        base_probabilities = np.full((n_samples, self.n_classes_), np.nan, dtype=float)
         rows: List[int] = []
         cols: List[int] = []
         stack: List[Tuple[_Node, np.ndarray]] = [(self.tree_, np.arange(n_samples, dtype=int))]
@@ -271,16 +292,17 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
             predicted = np.asarray(node.estimator.predict(X[indices])).reshape(-1)
             if predicted.shape[0] != len(indices):
                 raise ValueError("base_estimator.predict returned the wrong number of labels during prediction")
-            negative = self._matches_label(predicted, self.classes_[0])
-            positive = self._matches_label(predicted, self.classes_[1])
-            if np.any(~(negative | positive)) or np.any(negative & positive):
+            predicted_indices = self._class_indices(predicted)
+            if np.any(predicted_indices < 0):
                 raise ValueError("base_estimator.predict returned an invalid class label during prediction")
             if collect_base_probabilities:
                 base_probabilities[indices] = self._node_probabilities(node.estimator, X[indices], predicted)
-            if np.any(negative):
-                stack.append((node.negative_child, indices[negative]))
-            if np.any(positive):
-                stack.append((node.positive_child, indices[positive]))
+            for class_index in np.unique(predicted_indices)[::-1]:
+                child_indices = indices[predicted_indices == class_index]
+                child = node.children.get(int(class_index))
+                if child is None:
+                    raise RuntimeError("tree traversal found no child for a predicted class")
+                stack.append((child, child_indices))
         resolved_leaves = [node for node in leaves if node is not None]
         if len(resolved_leaves) != n_samples:
             raise RuntimeError("tree traversal did not assign every sample to a terminal node")
@@ -289,7 +311,7 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         return resolved_leaves, base_probabilities, leaf_ids
 
     def _node_probabilities(self, estimator, X, predicted):
-        probabilities = np.zeros((len(predicted), 2), dtype=float)
+        probabilities = np.zeros((len(predicted), self.n_classes_), dtype=float)
         if callable(getattr(estimator, "predict_proba", None)):
             try:
                 raw = np.asarray(estimator.predict_proba(X), dtype=float)
@@ -300,11 +322,15 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
                             if column < raw.shape[1]:
                                 probabilities[:, global_index] = raw[:, column]
                             break
-                if raw.ndim == 2 and raw.shape[0] == len(predicted) and np.all(np.isfinite(probabilities)):
+                if (
+                    raw.ndim == 2
+                    and raw.shape[0] == len(predicted)
+                    and np.all(np.isfinite(probabilities))
+                ):
                     return probabilities
             except Exception:
                 pass
-        probabilities[:, 0] = self._matches_label(predicted, self.classes_[0])
-        probabilities[:, 1] = self._matches_label(predicted, self.classes_[1])
+        predicted_indices = self._class_indices(predicted)
+        valid = predicted_indices >= 0
+        probabilities[valid, predicted_indices[valid]] = 1.0
         return probabilities
-
