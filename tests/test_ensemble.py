@@ -51,3 +51,17 @@ def test_sample_weight_propagates_through_ensemble():
     model.fit(X, y, sample_weight=np.ones(len(y)))
     assert model.predict(X).shape == y.shape
 
+
+def test_each_member_gets_its_independent_seed():
+    X, y = data()
+    model = BaggedRecursivePartitionClassifier(
+        estimator=RecursivePartitionClassifier(
+            base_estimator=SVC(kernel="rbf", probability=True, random_state=None)
+        ),
+        n_estimators=4,
+        random_state=42,
+        n_jobs=1,
+    ).fit(X, y)
+    member_seeds = np.asarray([estimator.base_estimator_.random_state for estimator in model.estimators_])
+    np.testing.assert_array_equal(member_seeds, model.estimator_seeds_)
+    assert len(np.unique(member_seeds)) == len(member_seeds)

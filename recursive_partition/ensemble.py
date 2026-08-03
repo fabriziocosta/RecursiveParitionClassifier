@@ -16,11 +16,25 @@ from .validation import validate_binary_targets, validate_sample_weight
 
 def _fit_member(template, X, y, indices, seed, sample_weight):
     model = clone(template)
+    _seed_random_state_parameters(model, seed)
     if sample_weight is None:
         model.fit(X[indices], y[indices])
     else:
         model.fit(X[indices], y[indices], sample_weight=sample_weight[indices])
     return model, indices, seed
+
+
+def _seed_random_state_parameters(estimator, seed):
+    """Seed every cloned randomized parameter without sharing mutable state."""
+
+    parameters = estimator.get_params(deep=True)
+    random_state_parameters = {
+        name: int(seed)
+        for name in parameters
+        if name == "random_state" or name.endswith("__random_state")
+    }
+    if random_state_parameters:
+        estimator.set_params(**random_state_parameters)
 
 
 class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
@@ -65,7 +79,10 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         rng = check_random_state(self.random_state)
         seeds = rng.randint(np.iinfo(np.int32).max, size=self.n_estimators, dtype=np.int64)
         samples = [self._draw_indices(rng, y, sample_size) for _ in range(self.n_estimators)]
-        fitted = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
+        # Each delayed call owns its bootstrap indices, seed, estimator clone,
+        # and fit. There is no dependency between calls: bagging is therefore
+        # embarrassingly parallel and preserves output ordering via joblib.
+        fitted = Parallel(n_jobs=self.n_jobs, verbose=self.verbose, prefer="processes")(
             delayed(_fit_member)(template, X, y, indices, int(seed), sample_weight)
             for indices, seed in zip(samples, seeds)
         )
@@ -82,7 +99,10 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         X = check_array(X, accept_sparse=["csr", "csc"], dtype=None)
         if X.shape[1] != self.n_features_in_:
             raise ValueError(f"X has {X.shape[1]} features, expected {self.n_features_in_}.")
-        probabilities = Parallel(n_jobs=self.n_jobs if self.n_estimators > 2 else 1)(
+        probabilities = Parallel(
+            n_jobs=self.n_jobs if self.n_estimators > 2 else 1,
+            prefer="processes",
+        )(
             delayed(_member_proba)(estimator, X) for estimator in self.estimators_
         )
         result = np.mean(np.asarray(probabilities), axis=0)

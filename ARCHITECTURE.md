@@ -682,7 +682,7 @@ Run the included executable example with:
 python examples/plot_two_moons.py
 ```
 
-The same demonstration is available as an interactive notebook at
+The shared 2D dataset comparison is available as an interactive notebook at
 [`notebooks/two_moons_demo.ipynb`](notebooks/two_moons_demo.ipynb). Install its
 optional plotting and Jupyter dependencies with:
 
