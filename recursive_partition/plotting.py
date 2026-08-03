@@ -17,6 +17,8 @@ def plot_probability_heatmap(
     padding: float = 0.55,
     grid_size: int = 250,
     title: str | None = None,
+    ax: Any | None = None,
+    colorbar: bool = True,
 ):
     """Plot binary or multiclass probabilities over a 2D feature grid.
 
@@ -59,7 +61,11 @@ def plot_probability_heatmap(
         entropy = -np.sum(probabilities * np.log(safe_probabilities), axis=2)
         confidence = 1.0 - entropy / np.log(len(classes))
         rgb = 1.0 - confidence[..., None] * (1.0 - color_mixture)
-        fig, axis = plt.subplots(figsize=(9, 6.5))
+        if ax is None:
+            fig, axis = plt.subplots(figsize=(9, 6.5))
+        else:
+            axis = ax
+            fig = axis.figure
         axis.imshow(
             np.clip(rgb, 0.0, 1.0),
             origin="lower",
@@ -73,12 +79,17 @@ def plot_probability_heatmap(
         if confidence.min() <= 0.5 <= confidence.max():
             axis.contour(xx, yy, confidence, levels=[0.5], linewidths=1.0,
                          colors="black")
-        confidence_scale = ScalarMappable(norm=Normalize(0.0, 1.0), cmap="Greys_r")
-        confidence_scale.set_array(confidence)
-        colorbar = fig.colorbar(confidence_scale, ax=axis)
-        colorbar.set_label("Confidence (1 − normalized entropy)")
+        if colorbar:
+            confidence_scale = ScalarMappable(norm=Normalize(0.0, 1.0), cmap="Greys_r")
+            confidence_scale.set_array(confidence)
+            confidence_bar = fig.colorbar(confidence_scale, ax=axis)
+            confidence_bar.set_label("Confidence (1 − normalized entropy)")
     else:
-        fig, axis = plt.subplots(figsize=(9, 6.5))
+        if ax is None:
+            fig, axis = plt.subplots(figsize=(9, 6.5))
+        else:
+            axis = ax
+            fig = axis.figure
         probability = probabilities[:, :, 1]
         axis.contourf(xx, yy, probability, levels=np.linspace(0, 1, 41),
                       cmap="RdBu_r", vmin=0, vmax=1, alpha=0.9)
@@ -97,5 +108,6 @@ def plot_probability_heatmap(
     axis.set_ylabel("Feature 2")
     axis.set_aspect("equal", adjustable="box")
     axis.legend(loc="upper right")
-    fig.tight_layout()
+    if ax is None:
+        fig.tight_layout()
     return fig

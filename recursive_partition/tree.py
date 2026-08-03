@@ -104,7 +104,9 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
                 predicted_classes = np.unique(predicted_indices)
                 if len(predicted_classes) < 2:
                     continue
-                if self.max_nodes is not None and len(self.nodes_) + len(predicted_classes) > self.max_nodes:
+                local_classes = np.unique(self._class_indices(y_node))
+                child_classes = np.unique(np.concatenate((predicted_classes, local_classes)))
+                if self.max_nodes is not None and len(self.nodes_) + len(child_classes) > self.max_nodes:
                     continue
             except Exception as exc:
                 self._handle_fit_failure(exc, node)
@@ -113,16 +115,19 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
             node.estimator = estimator
             node.is_leaf = False
             node.children = {}
-            for class_index in predicted_classes:
+            for class_index in child_classes:
                 child_indices = indices[predicted_indices == class_index]
                 child = self._make_node(
                     len(self.nodes_), node.depth + 1, child_indices, y, sample_weight
                 )
+                if len(child_indices) == 0:
+                    child.class_counts = node.class_counts.copy()
+                    child.predicted_class_index = int(class_index)
                 node.children[int(class_index)] = child
             if self.n_classes_ == 2:
                 node.negative_child = node.children.get(0)
                 node.positive_child = node.children.get(1)
-            for class_index in predicted_classes[::-1]:
+            for class_index in child_classes[::-1]:
                 child_indices = indices[predicted_indices == class_index]
                 stack.append((node.children[int(class_index)], child_indices))
 

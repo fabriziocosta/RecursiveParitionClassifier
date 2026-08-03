@@ -1,4 +1,4 @@
-You are to implement a production-quality, scikit-learn-compatible classifier for recursive top-down partitioning with modular binary base estimators, plus an optional parallel bagging ensemble.
+You are to implement a production-quality, scikit-learn-compatible classifier for recursive top-down partitioning with modular binary or multiclass base estimators, plus an optional parallel bagging ensemble.
 
 The implementation must support plugging in classifiers such as:
 
@@ -29,7 +29,7 @@ sklearn.base.ClassifierMixin
 
 ### Algorithm
 
-For a binary classification problem, at every node:
+At every node, for binary or multiclass classification:
 
 1. Take the subset of training observations routed to that node.
 2. Fit a fresh clone of `base_estimator` using:
@@ -37,10 +37,9 @@ For a binary classification problem, at every node:
    * the observations in that node;
    * their original ground-truth targets, not the parent predictions.
 3. Predict the labels of the same node observations using the fitted estimator.
-4. Define the two child partitions from those predicted labels:
+4. Define one child partition for each distinct predicted class:
 
-   * negative child: observations predicted as `classes_[0]`;
-   * positive child: observations predicted as `classes_[1]`.
+   * child `k`: observations predicted as `classes_[k]`.
 5. Recursively repeat the procedure independently in both children.
 
 The principal stopping rules are:
@@ -153,7 +152,7 @@ stack = [(root, np.arange(n_samples))]
 At each internal node:
 
 1. call the node estimator’s `predict` once for the complete subset;
-2. dispatch the corresponding index arrays to the two children.
+2. dispatch the corresponding index arrays to the predicted-class children.
 
 Implement:
 
@@ -357,8 +356,8 @@ estimator__base_estimator__gamma
 
 * support use inside `Pipeline`;
 * support `GridSearchCV`, `RandomizedSearchCV`, and `cross_val_score`;
-* preserve arbitrary binary class labels such as strings or negative integers;
-* reject multiclass input with a clear error;
+* preserve arbitrary class labels such as strings or negative integers;
+* support binary and multiclass input with a clear class-to-column mapping;
 * handle dense NumPy arrays and CSR/CSC sparse matrices when the supplied base estimator supports them;
 * include `_more_tags` or `__sklearn_tags__` only if needed for the installed scikit-learn version.
 
@@ -396,7 +395,7 @@ If training indices are retained for diagnostics, make this optional because it 
 
 Handle:
 
-* arbitrary binary labels;
+* arbitrary binary and multiclass labels;
 * one-class child nodes;
 * singleton nodes;
 * estimator fit failures;
@@ -475,7 +474,7 @@ Use `pytest`.
 
 Include tests for:
 
-1. basic binary fit and prediction;
+1. basic binary and multiclass fit and prediction;
 2. arbitrary string labels;
 3. uniform-class stopping;
 4. singleton stopping;
@@ -630,7 +629,7 @@ The split is not selected with Gini impurity, entropy, information gain, or a
 threshold search. A fresh `clone(base_estimator)` is used at every node.
 
 Bagging fits independent recursive partitioners on bootstrap samples and
-averages their two-column probability outputs. Boosting is different: it fits
+averages their class-by-class probability outputs. Boosting is different: it fits
 models sequentially while changing observation weights to focus on prior
 errors. This package does not implement boosting or sequential reweighting.
 
@@ -666,7 +665,7 @@ independent fits with joblib; ensemble prediction averages one batched
 prediction per member.
 
 The implementation supports dense arrays and CSR/CSC matrices when the base
-estimator supports them. It is intentionally binary-only. Estimator-specific
+estimator supports them. It supports binary and multiclass targets. Estimator-specific
 small-sample requirements are handled by turning failed nodes into leaves by
 default; `on_fit_failure="raise"` is available for strict diagnostics, and
 `node_fit_validator` can add optional feasibility checks. Extremely deep
@@ -719,6 +718,6 @@ pytest -q
 
 The installed scikit-learn 1.9.0 `check_estimator(RecursivePartitionClassifier())`
 suite includes a one-label training case and therefore raises the intentional
-binary-target error. This package documents that limitation: multiclass and
-one-class training inputs are rejected; normal binary estimator checks and the
-broader pipeline/search behaviors are covered by the included tests.
+target validation error. One-class and unsupported target structures are
+rejected; binary and multiclass estimator checks and the broader
+pipeline/search behaviors are covered by the included tests.

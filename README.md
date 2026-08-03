@@ -1,6 +1,6 @@
 # Recursive Partition Classifier
 
-Scikit-learn-compatible binary classifiers that recursively partition data
+Scikit-learn-compatible binary and multiclass classifiers that recursively partition data
 using predictions from a configurable base estimator, plus an optional
 parallel bagging ensemble.
 
@@ -31,7 +31,7 @@ predictions = model.predict(X_test)
 probabilities = model.predict_proba(X_test)
 ```
 
-Swap in another binary classifier without changing the recursive partitioner:
+Swap in another classifier without changing the recursive partitioner:
 
 ```python
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
@@ -77,10 +77,13 @@ from recursive_partition import (
 )
 ```
 
-The classifiers are binary-only, support dense and compatible CSR/CSC inputs,
-and expose `fit`, `predict`, `predict_proba`, `apply`, `decision_path`,
-`get_depth`, and `get_n_leaves` where applicable. See `ARCHITECTURE.md` for
-stopping rules, probability modes, sample weights, safeguards, and limitations.
+The classifiers support binary and multiclass targets, dense and compatible
+CSR/CSC inputs, and expose `fit`, `predict`, `predict_proba`, `apply`,
+`decision_path`, `get_depth`, and `get_n_leaves` where applicable. The package
+also includes the self-contained `make_2d_dataset` and
+`plot_probability_heatmap` helpers used by the notebook. See
+`ARCHITECTURE.md` for stopping rules, probability modes, sample weights,
+safeguards, and limitations.
 
 ## Development
 
