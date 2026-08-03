@@ -34,14 +34,15 @@ probabilities = model.predict_proba(X_test)
 Swap in another classifier without changing the recursive partitioner:
 
 ```python
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from recursive_partition import EqualPriorQDA
 
 model = RecursivePartitionClassifier(
-    base_estimator=QuadraticDiscriminantAnalysis(
-        priors=[0.5, 0.5], reg_param=0.05
-    )
+    base_estimator=EqualPriorQDA(reg_param=0.05)
 )
 ```
+
+`EqualPriorQDA` recalculates uniform priors from the classes present at each
+recursive node, so it works for both binary and multiclass data.
 
 ## Bagging
 

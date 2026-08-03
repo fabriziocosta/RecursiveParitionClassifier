@@ -9,7 +9,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
-from recursive_partition import RecursivePartitionClassifier, make_2d_dataset
+from recursive_partition import EqualPriorQDA, RecursivePartitionClassifier, make_2d_dataset
 
 
 def data():
@@ -63,6 +63,22 @@ def test_qda_failure_becomes_leaf():
     model = RecursivePartitionClassifier(base_estimator=QuadraticDiscriminantAnalysis()).fit(X, y)
     assert model.n_nodes_ >= 1
     assert model.predict_proba(X).shape == (4, 2)
+
+
+def test_equal_prior_qda_uses_local_binary_priors():
+    X, y = data()
+    estimator = EqualPriorQDA(reg_param=0.05)
+    estimator.fit(X, y)
+    np.testing.assert_allclose(estimator.priors_, [0.5, 0.5])
+
+
+def test_equal_prior_qda_uses_local_multiclass_priors():
+    X, y = make_2d_dataset("blobs", n_samples=180, n_classes=3, random_state=12)
+    model = RecursivePartitionClassifier(base_estimator=EqualPriorQDA(reg_param=0.05)).fit(X, y)
+    for node in model.nodes_:
+        if not node.is_leaf:
+            priors = node.estimator.priors_
+            np.testing.assert_allclose(priors, np.full(len(priors), 1.0 / len(priors)))
 
 
 @pytest.mark.parametrize("estimator", [

@@ -6,11 +6,10 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.datasets import make_moons
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 
-from recursive_partition import BaggedRecursivePartitionClassifier, RecursivePartitionClassifier
+from recursive_partition import BaggedRecursivePartitionClassifier, EqualPriorQDA, RecursivePartitionClassifier
 
 
 def plot_model(ax, name, model, X_train, y_train, X_test, y_test):
@@ -50,14 +49,14 @@ def main():
         (
             "Regularized QDA",
             RecursivePartitionClassifier(
-                base_estimator=QuadraticDiscriminantAnalysis(priors=[0.5, 0.5], reg_param=0.05)
+                base_estimator=EqualPriorQDA(reg_param=0.05)
             ),
         ),
         (
             "Bagged QDA",
             BaggedRecursivePartitionClassifier(
                 estimator=RecursivePartitionClassifier(
-                    base_estimator=QuadraticDiscriminantAnalysis(priors=[0.5, 0.5], reg_param=0.05)
+                    base_estimator=EqualPriorQDA(reg_param=0.05)
                 ),
                 n_estimators=60,
                 n_jobs=-1,
@@ -74,4 +73,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

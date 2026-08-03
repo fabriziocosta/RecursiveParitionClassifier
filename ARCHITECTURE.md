@@ -7,6 +7,7 @@ SVC(kernel="linear", class_weight="balanced")
 SVC(kernel="rbf", class_weight="balanced")
 SVC(kernel="poly", degree=2, class_weight="balanced")
 QuadraticDiscriminantAnalysis(priors=[0.5, 0.5], reg_param=0.05)
+EqualPriorQDA(reg_param=0.05)
 LinearDiscriminantAnalysis(priors=[0.5, 0.5])
 ```
 
@@ -110,6 +111,9 @@ QuadraticDiscriminantAnalysis(priors=[0.5, 0.5], reg_param=0.05)
 ```
 
 For QDA, equal priors should be user-configurable, not automatically imposed by the recursive classifier.
+The package provides ``EqualPriorQDA`` for this configuration: it sets a
+uniform prior vector from the classes present at each node, so it remains
+valid when recursive nodes contain different subsets of a multiclass target.
 
 ### QDA feasibility
 
@@ -640,9 +644,7 @@ linear = RecursivePartitionClassifier(
     base_estimator=SVC(kernel="linear", class_weight="balanced")
 )
 qda = RecursivePartitionClassifier(
-    base_estimator=QuadraticDiscriminantAnalysis(
-        priors=[0.5, 0.5], reg_param=0.05
-    )
+    base_estimator=EqualPriorQDA(reg_param=0.05)
 )
 ```
 
