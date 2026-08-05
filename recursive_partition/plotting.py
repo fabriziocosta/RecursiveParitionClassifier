@@ -19,12 +19,17 @@ def plot_probability_heatmap(
     title: str | None = None,
     ax: Any | None = None,
     colorbar: bool = True,
+    decision_margin: float = 0.1,
 ):
     """Plot binary or multiclass probabilities over a 2D feature grid.
 
     Multiclass backgrounds use a probability-weighted ``tab10`` color mixture.
     Normalized entropy fades uncertain regions toward white, while black
     contours show predicted-class boundaries and the confidence boundary.
+    The thin contour is controlled by ``decision_margin``. For binary plots it
+    shows ``abs(p_1 - p_0) == decision_margin``; for multiclass plots it shows
+    where the top-class probability exceeds the second-highest probability by
+    ``decision_margin``. This makes the contour comparable across class counts.
     Matplotlib is imported lazily so plotting remains an optional dependency.
     """
 
@@ -37,6 +42,8 @@ def plot_probability_heatmap(
         raise ValueError("X must have shape (n_samples, 2) for heatmap plotting")
     if grid_size < 2:
         raise ValueError("grid_size must be at least 2")
+    if not np.isfinite(decision_margin) or not 0.0 <= decision_margin <= 1.0:
+        raise ValueError("decision_margin must be finite and between 0 and 1")
     X_points = X if X_train is None else np.asarray(X_train)
     y_points = y if y_train is None else np.asarray(y_train)
     if y_points is None:
@@ -76,8 +83,10 @@ def plot_probability_heatmap(
         boundaries = np.arange(0.5, len(classes) - 0.5, 1.0)
         axis.contour(xx, yy, predicted_indices, levels=boundaries,
                      linewidths=2, colors="black")
-        if confidence.min() <= 0.5 <= confidence.max():
-            axis.contour(xx, yy, confidence, levels=[0.5], linewidths=1.0,
+        sorted_probabilities = np.sort(probabilities, axis=2)
+        decision_margin_surface = sorted_probabilities[:, :, -1] - sorted_probabilities[:, :, -2]
+        if decision_margin_surface.min() <= decision_margin <= decision_margin_surface.max():
+            axis.contour(xx, yy, decision_margin_surface, levels=[decision_margin], linewidths=0.45,
                          colors="black")
         if colorbar:
             confidence_scale = ScalarMappable(norm=Normalize(0.0, 1.0), cmap="Greys_r")
@@ -93,8 +102,16 @@ def plot_probability_heatmap(
         probability = probabilities[:, :, 1]
         axis.contourf(xx, yy, probability, levels=np.linspace(0, 1, 41),
                       cmap="RdBu_r", vmin=0, vmax=1, alpha=0.9)
-        axis.contour(xx, yy, probability, levels=[0.5], linewidths=1.0,
+        axis.contour(xx, yy, probability, levels=[0.5], linewidths=2.0,
                      colors="black")
+        decision_margin_surface = np.abs(2.0 * probability - 1.0)
+        if (
+            decision_margin_surface.min()
+            <= decision_margin
+            <= decision_margin_surface.max()
+        ):
+            axis.contour(xx, yy, decision_margin_surface, levels=[decision_margin], linewidths=0.45,
+                         colors="black")
 
     for class_index, class_value in enumerate(classes):
         mask = y_points == class_value

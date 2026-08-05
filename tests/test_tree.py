@@ -5,11 +5,18 @@ from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
 from sklearn.dummy import DummyClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
-from recursive_partition import EqualPriorQDA, RecursivePartitionClassifier, make_2d_dataset
+from recursive_partition import (
+    EqualPriorQDA,
+    MLPClassifierAdapter,
+    MLPClassifierAdaptor,
+    RecursivePartitionClassifier,
+    make_2d_dataset,
+)
 
 
 def data():
@@ -90,6 +97,25 @@ def test_estimator_plugins(estimator):
     X, y = data()
     model = RecursivePartitionClassifier(base_estimator=estimator).fit(X, y)
     assert model.predict(X).shape == y.shape
+
+
+def test_mlp_classifier_adapter_is_sklearn_compatible():
+    X, y = data()
+    estimator = MLPClassifierAdapter(
+        hidden_layer_sizes=(6,),
+        solver="lbfgs",
+        max_iter=100,
+        random_state=7,
+    )
+    assert isinstance(estimator, MLPClassifier)
+    assert estimator.get_params()["hidden_layer_sizes"] == (6,)
+    assert MLPClassifierAdaptor is MLPClassifierAdapter
+
+    model = RecursivePartitionClassifier(base_estimator=estimator, max_depth=3).fit(X, y)
+    assert model.predict(X).shape == y.shape
+    probabilities = model.predict_proba(X)
+    assert probabilities.shape == (len(y), 2)
+    np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
 
 
 def test_multiclass_fit_prediction_and_probabilities():

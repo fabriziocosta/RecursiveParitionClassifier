@@ -44,6 +44,28 @@ model = RecursivePartitionClassifier(
 `EqualPriorQDA` recalculates uniform priors from the classes present at each
 recursive node, so it works for both binary and multiclass data.
 
+For scikit-learn artificial neural networks, use the MLP adaptor. It exposes
+the same constructor parameters as `MLPClassifier` and provides a stable
+`sample_weight` fit argument across scikit-learn versions:
+
+```python
+from sklearn.neural_network import MLPClassifier
+from recursive_partition import MLPClassifierAdapter
+
+model = RecursivePartitionClassifier(
+    base_estimator=MLPClassifierAdapter(
+        hidden_layer_sizes=(32, 16),
+        max_iter=500,
+        random_state=42,
+    )
+)
+```
+
+`MLPClassifier` can also be supplied directly when sample-weight compatibility
+is not needed. `MLPClassifierAdapter` does not alter the neural-network
+algorithm; it only forwards weights when the installed scikit-learn version
+supports them. `MLPClassifierAdaptor` is an equivalent spelling.
+
 ## Bagging
 
 ```python

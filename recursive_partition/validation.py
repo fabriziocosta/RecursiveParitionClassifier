@@ -33,6 +33,10 @@ def validate_binary_targets(y: Any) -> np.ndarray:
 def supports_sample_weight(estimator: Any) -> bool:
     """Detect whether an estimator's fit method accepts sample_weight."""
 
+    declared_support = getattr(estimator, "_fit_accepts_sample_weight", None)
+    if callable(declared_support):
+        return bool(declared_support())
+
     try:
         signature = inspect.signature(estimator.fit)
     except (TypeError, ValueError):
