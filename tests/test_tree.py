@@ -2,6 +2,8 @@ import numpy as np
 import pytest
 from scipy import sparse
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import Product
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV
 from sklearn.dummy import DummyClassifier
@@ -12,6 +14,8 @@ from sklearn.svm import SVC
 
 from recursive_partition import (
     EqualPriorQDA,
+    GaussianProcessClassifierAdapter,
+    GaussianProcessClassifierAdaptor,
     MLPClassifierAdapter,
     MLPClassifierAdaptor,
     RecursivePartitionClassifier,
@@ -131,6 +135,25 @@ def test_mlp_classifier_adapter_balances_recursive_nodes():
         max_depth=4,
     ).fit(X, y)
     assert model.get_depth() > 1
+
+
+def test_gaussian_process_classifier_adapter_balances_recursive_nodes():
+    X, y = make_2d_dataset("moon", n_samples=120, noise=0.2, random_state=42)
+    estimator = GaussianProcessClassifierAdapter(
+        optimizer=None,
+        max_iter_predict=30,
+        random_state=0,
+    )
+    assert isinstance(estimator, GaussianProcessClassifier)
+    assert isinstance(estimator.kernel, Product)
+    assert estimator.get_params()["class_weight"] == "balanced"
+    assert GaussianProcessClassifierAdaptor is GaussianProcessClassifierAdapter
+
+    model = RecursivePartitionClassifier(base_estimator=estimator, max_depth=3).fit(X, y)
+    probabilities = model.predict_proba(X)
+    assert model.get_depth() > 1
+    assert probabilities.shape == (len(y), 2)
+    np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
 
 
 def test_multiclass_fit_prediction_and_probabilities():

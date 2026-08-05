@@ -7,10 +7,8 @@ import inspect
 import numpy as np
 
 from sklearn.neural_network import MLPClassifier
-from sklearn.utils.class_weight import compute_sample_weight
-from sklearn.utils import check_random_state
 
-from .validation import validate_sample_weight
+from ._balancing import local_sample_weights, weighted_resample_indices
 
 
 class MLPClassifierAdapter(MLPClassifier):
@@ -110,15 +108,9 @@ class MLPClassifierAdapter(MLPClassifier):
         if len(labels) == 0:
             return super().fit(X, y)
 
-        if sample_weight is not None:
-            sample_weight = validate_sample_weight(sample_weight, len(labels))
-        balancing_weights = self._class_weights(labels)
-        combined_weights = balancing_weights
-        if sample_weight is not None:
-            combined_weights = combined_weights * sample_weight
-
-        if not np.any(combined_weights > 0):
-            raise ValueError("class balancing and sample_weight produced no positive weights.")
+        labels, combined_weights = local_sample_weights(
+            labels, self.class_weight, sample_weight
+        )
 
         if self.class_weight is None and sample_weight is None:
             # Do not pass the keyword on older scikit-learn releases.
@@ -127,47 +119,14 @@ class MLPClassifierAdapter(MLPClassifier):
         if self._fit_accepts_sample_weight():
             return super().fit(X, y, sample_weight=combined_weights)
 
-        indices = self._weighted_resample_indices(labels, combined_weights)
+        indices = weighted_resample_indices(
+            labels,
+            combined_weights,
+            self.random_state,
+            balance_classes=self.class_weight is not None,
+        )
         X_resampled = X.iloc[indices] if hasattr(X, "iloc") else X[indices]
         return super().fit(X_resampled, labels[indices])
-
-    def _class_weights(self, y):
-        if self.class_weight is None:
-            return np.ones(len(y), dtype=float)
-        return np.asarray(compute_sample_weight(self.class_weight, y), dtype=float)
-
-    def _weighted_resample_indices(self, y, weights):
-        """Create equal-total-weight class samples for old sklearn releases."""
-
-        classes = np.unique(y)
-        class_totals = np.asarray(
-            [weights[self._matches_label(y, value)].sum() for value in classes],
-            dtype=float,
-        )
-        target_size = max(1, int(np.ceil(class_totals.max())))
-        rng = check_random_state(self.random_state)
-        resampled = []
-        for class_value in classes:
-            class_indices = np.flatnonzero(self._matches_label(y, class_value))
-            class_weights = weights[class_indices]
-            if not np.any(class_weights > 0):
-                continue
-            probabilities = class_weights / class_weights.sum()
-            resampled.append(
-                rng.choice(class_indices, size=target_size, replace=True, p=probabilities)
-            )
-        if not resampled:
-            raise ValueError("class balancing produced no samples.")
-        indices = np.concatenate(resampled)
-        rng.shuffle(indices)
-        return indices.astype(int)
-
-    @staticmethod
-    def _matches_label(values, label):
-        try:
-            return np.asarray(values == label, dtype=bool)
-        except (TypeError, ValueError):
-            return np.fromiter((value == label for value in values), dtype=bool, count=len(values))
 
     @staticmethod
     def _fit_accepts_sample_weight():

@@ -69,6 +69,25 @@ provide custom local weights. `MLPClassifier` can also be supplied directly
 when this recursive-node balancing is not needed. `MLPClassifierAdaptor` is
 an equivalent spelling.
 
+Gaussian-process classification is available through an adaptor with a
+`ConstantKernel * Matern` default and the same local balancing behavior:
+
+```python
+from recursive_partition import GaussianProcessClassifierAdapter
+
+model = RecursivePartitionClassifier(
+    base_estimator=GaussianProcessClassifierAdapter(
+        optimizer=None,
+        class_weight="balanced",
+        random_state=42,
+    )
+)
+```
+
+Because Gaussian-process fitting scales cubically with the number of samples,
+it is best suited to smaller recursive nodes or datasets. Set
+`class_weight=None` to disable adaptor resampling.
+
 ## Bagging
 
 ```python

@@ -6,6 +6,10 @@ from .datasets import make_2d_dataset
 from .plotting import plot_probability_heatmap
 from .qda import EqualPriorQDA
 from .neural_network import MLPClassifierAdapter, MLPClassifierAdaptor
+from .gaussian_process import (
+    GaussianProcessClassifierAdapter,
+    GaussianProcessClassifierAdaptor,
+)
 
 __all__ = [
     "RecursivePartitionClassifier",
@@ -15,4 +19,6 @@ __all__ = [
     "EqualPriorQDA",
     "MLPClassifierAdapter",
     "MLPClassifierAdaptor",
+    "GaussianProcessClassifierAdapter",
+    "GaussianProcessClassifierAdaptor",
 ]
