@@ -46,7 +46,9 @@ recursive node, so it works for both binary and multiclass data.
 
 For scikit-learn artificial neural networks, use the MLP adaptor. It exposes
 the same constructor parameters as `MLPClassifier` and provides a stable
-`sample_weight` fit argument across scikit-learn versions:
+`sample_weight` fit argument across scikit-learn versions. It also balances
+classes within each recursive node by default, preventing child MLPs from
+collapsing to their local majority class:
 
 ```python
 from sklearn.neural_network import MLPClassifier
@@ -56,15 +58,16 @@ model = RecursivePartitionClassifier(
     base_estimator=MLPClassifierAdapter(
         hidden_layer_sizes=(32, 16),
         max_iter=500,
+        class_weight="balanced",
         random_state=42,
     )
 )
 ```
 
-`MLPClassifier` can also be supplied directly when sample-weight compatibility
-is not needed. `MLPClassifierAdapter` does not alter the neural-network
-algorithm; it only forwards weights when the installed scikit-learn version
-supports them. `MLPClassifierAdaptor` is an equivalent spelling.
+`class_weight=None` disables balancing, while a class-weight dictionary can
+provide custom local weights. `MLPClassifier` can also be supplied directly
+when this recursive-node balancing is not needed. `MLPClassifierAdaptor` is
+an equivalent spelling.
 
 ## Bagging
 
@@ -87,7 +90,7 @@ not boost or sequentially reweight observations.
 
 ## Examples and API
 
-- [2D dataset comparison notebook](notebooks/two_moons_demo.ipynb)
+- [2D dataset comparison notebook](notebooks/recursive_partition_datasets_demo.ipynb)
 - [Executable plotting example](examples/plot_two_moons.py)
 - [Architecture and full design specification](ARCHITECTURE.md)
 

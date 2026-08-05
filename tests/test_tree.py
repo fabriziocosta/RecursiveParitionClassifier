@@ -116,6 +116,21 @@ def test_mlp_classifier_adapter_is_sklearn_compatible():
     probabilities = model.predict_proba(X)
     assert probabilities.shape == (len(y), 2)
     np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
+    assert estimator.get_params()["class_weight"] == "balanced"
+
+
+def test_mlp_classifier_adapter_balances_recursive_nodes():
+    X, y = make_2d_dataset("moon", n_samples=300, noise=0.2, random_state=71)
+    model = RecursivePartitionClassifier(
+        base_estimator=MLPClassifierAdapter(
+            hidden_layer_sizes=(16,),
+            max_iter=500,
+            tol=1e-3,
+            random_state=42,
+        ),
+        max_depth=4,
+    ).fit(X, y)
+    assert model.get_depth() > 1
 
 
 def test_multiclass_fit_prediction_and_probabilities():
