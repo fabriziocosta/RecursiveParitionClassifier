@@ -90,3 +90,18 @@ def test_multiclass_bagging_probabilities_and_oob_shape():
     np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
     assert model.predict(X).shape == y.shape
     assert all(len(np.unique(y[indices])) == 3 for indices in model.estimators_samples_)
+
+
+def test_max_depth_is_exposed_and_propagated_to_members():
+    X, y = data()
+    model = BaggedRecursivePartitionClassifier(
+        n_estimators=4,
+        max_depth=1,
+        random_state=42,
+        n_jobs=1,
+    ).fit(X, y)
+
+    assert model.get_params()["max_depth"] == 1
+    assert model.estimator_.max_depth == 1
+    assert all(estimator.max_depth == 1 for estimator in model.estimators_)
+    assert all(estimator.get_depth() <= 1 for estimator in model.estimators_)

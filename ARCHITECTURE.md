@@ -217,6 +217,7 @@ BaggedRecursivePartitionClassifier(
     aggregation="mean_proba",
     oob_score=False,
     verbose=0,
+    max_depth=None,
 )
 ```
 
@@ -230,6 +231,9 @@ ensemble aggregates probabilities. The fitted template is cloned into
 
 `max_samples` may be an integer between 1 and `n_samples`, or a float in
 `(0, 1]`. A float is converted with `ceil(max_samples * n_samples)`.
+`max_depth` is an optional non-negative integer applied to each member. When a
+custom estimator is supplied, it must expose a `max_depth` parameter whenever
+`max_depth` is not `None`.
 
 Every member’s sample is constructed so that it contains at least one training
 row from every global class. With `bootstrap=True`, the remaining rows are

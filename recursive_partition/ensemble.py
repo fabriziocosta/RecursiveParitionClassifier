@@ -51,10 +51,12 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         aggregation="mean_proba",
         oob_score=False,
         verbose=0,
+        max_depth=None,
     ):
         self.estimator = estimator
         self.n_estimators = n_estimators
         self.max_samples = max_samples
+        self.max_depth = max_depth
         self.bootstrap = bootstrap
         self.n_jobs = n_jobs
         self.random_state = random_state
@@ -73,6 +75,14 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         template = self.estimator if self.estimator is not None else RecursivePartitionClassifier()
         if not callable(getattr(template, "fit", None)) or not callable(getattr(template, "predict_proba", None)):
             raise TypeError("estimator must implement fit and predict_proba methods.")
+        if self.max_depth is not None:
+            template = clone(template)
+            try:
+                template.set_params(max_depth=self.max_depth)
+            except (AttributeError, ValueError) as exc:
+                raise ValueError(
+                    "max_depth can only be set when estimator exposes a max_depth parameter."
+                ) from exc
         self.estimator_ = clone(template)
 
         n_samples = X.shape[0]
@@ -118,6 +128,10 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
     def _validate_options(self, n_samples):
         if not isinstance(self.n_estimators, (int, np.integer)) or self.n_estimators < 1:
             raise ValueError("n_estimators must be a positive integer.")
+        if self.max_depth is not None and (
+            not isinstance(self.max_depth, (int, np.integer)) or self.max_depth < 0
+        ):
+            raise ValueError("max_depth must be None or a non-negative integer.")
         if self.aggregation != "mean_proba":
             raise ValueError("aggregation must be 'mean_proba'.")
         if isinstance(self.max_samples, (float, np.floating)):
