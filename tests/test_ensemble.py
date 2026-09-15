@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import sparse
 from sklearn.svm import SVC
 
 from sklearn.linear_model import LogisticRegression
@@ -90,6 +91,28 @@ def test_multiclass_bagging_probabilities_and_oob_shape():
     np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
     assert model.predict(X).shape == y.shape
     assert all(len(np.unique(y[indices])) == 3 for indices in model.estimators_samples_)
+
+
+def test_transform_returns_concatenated_member_node_matrices():
+    X, y = data()
+    model = BaggedRecursivePartitionClassifier(
+        estimator=RecursivePartitionClassifier(
+            base_estimator=LogisticRegression(max_iter=500),
+            max_depth=2,
+        ),
+        n_estimators=3,
+        random_state=12,
+        n_jobs=1,
+    ).fit(X, y)
+
+    representation = model.transform(X)
+
+    assert sparse.isspmatrix_csr(representation)
+    assert representation.shape == (
+        len(X),
+        sum(estimator.n_nodes_ for estimator in model.estimators_),
+    )
+    assert len(model.get_feature_names_out()) == representation.shape[1]
 
 
 def test_max_depth_is_exposed_and_propagated_to_members():

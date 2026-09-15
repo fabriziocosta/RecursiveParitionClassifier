@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 from scipy import sparse
-from sklearn.base import BaseEstimator, ClassifierMixin, clone
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin, clone
 from sklearn.svm import SVC
 from sklearn.utils import check_array, check_X_y
 from sklearn.utils.validation import check_is_fitted
@@ -20,7 +20,7 @@ from .validation import (
 )
 
 
-class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
+class RecursivePartitionClassifier(ClassifierMixin, TransformerMixin, BaseEstimator):
     """A classifier-driven recursive top-down partitioner.
 
     Each non-leaf node fits a fresh clone of ``base_estimator`` on the true
@@ -142,6 +142,40 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
         leaves, _, _ = self._traverse(X)
         return self.classes_[np.fromiter((node.predicted_class_index for node in leaves), dtype=int)]
 
+    def transform(self, X):
+        """Return a sparse node-incidence matrix for the input samples.
+
+        The matrix has one row per sample and one column per fitted node. An
+        entry is one when the sample traverses that node and zero otherwise.
+        Columns are ordered by node ID, matching ``decision_path`` and
+        ``apply``.
+        """
+
+        return self.decision_path(X)
+
+    def fit_transform(self, X, y, sample_weight=None, **fit_params):
+        """Fit the classifier and return the sparse node-incidence matrix."""
+
+        if fit_params:
+            unexpected = ", ".join(sorted(fit_params))
+            raise TypeError(f"Unexpected fit parameters: {unexpected}")
+        return self.fit(X, y, sample_weight=sample_weight).transform(X)
+
+    def get_feature_names_out(self, input_features=None):
+        """Return names corresponding to the node-ID columns."""
+
+        check_is_fitted(self, "tree_")
+        if input_features is not None:
+            input_features = np.asarray(input_features, dtype=object)
+            if input_features.ndim != 1 or len(input_features) != self.n_features_in_:
+                raise ValueError(
+                    "input_features must have one entry for each input feature"
+                )
+        return np.asarray(
+            [f"recursive_partition_node_{node_id}" for node_id in range(self.n_nodes_)],
+            dtype=object,
+        )
+
     def predict_proba(self, X):
         """Return class probabilities using leaf frequencies or routing probabilities."""
 
@@ -172,7 +206,8 @@ class RecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
 
         _, _, _, rows, cols = self._traverse(X, return_path=True)
         data = np.ones(len(rows), dtype=np.int8)
-        return sparse.csr_matrix((data, (rows, cols)), shape=(len(check_array(X, accept_sparse=["csr", "csc"])), self.n_nodes_))
+        X = check_array(X, accept_sparse=["csr", "csc"])
+        return sparse.csr_matrix((data, (rows, cols)), shape=(X.shape[0], self.n_nodes_))
 
     def get_depth(self):
         """Return the maximum root-to-leaf depth, with the root at depth zero."""

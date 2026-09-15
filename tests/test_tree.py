@@ -53,6 +53,29 @@ def test_string_labels_and_apply_decision_path():
     assert np.all(np.asarray(path[np.arange(len(X)), leaves]).ravel() == 1)
 
 
+def test_transform_exposes_sparse_node_incidence_matrix():
+    X, y = data()
+    model = RecursivePartitionClassifier(
+        base_estimator=LogisticRegression(max_iter=500)
+    )
+    path = model.fit_transform(X, y)
+    assert sparse.isspmatrix_csr(path)
+    assert path.shape == (len(X), model.n_nodes_)
+    np.testing.assert_array_equal(path.toarray(), model.transform(X).toarray())
+    assert len(model.get_feature_names_out()) == model.n_nodes_
+    assert model.get_feature_names_out()[0] == "recursive_partition_node_0"
+
+
+def test_transform_accepts_sparse_input():
+    X, y = data()
+    model = RecursivePartitionClassifier(
+        base_estimator=LogisticRegression(max_iter=500)
+    ).fit(sparse.csr_matrix(X), y)
+    path = model.transform(sparse.csr_matrix(X))
+    assert sparse.isspmatrix_csr(path)
+    assert path.shape == (len(X), model.n_nodes_)
+
+
 def test_uniform_and_singleton_stopping():
     X, y = data()
     uniform = RecursivePartitionClassifier().fit(X, np.where(np.arange(len(y)) % 2, "a", "b"))

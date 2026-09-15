@@ -6,7 +6,8 @@ from typing import Any, List, Tuple
 
 import numpy as np
 from joblib import Parallel, delayed
-from sklearn.base import BaseEstimator, ClassifierMixin, clone
+from scipy import sparse
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin, clone
 from sklearn.utils import check_array, check_X_y, check_random_state
 from sklearn.utils.validation import check_is_fitted
 
@@ -37,7 +38,9 @@ def _seed_random_state_parameters(estimator, seed):
         estimator.set_params(**random_state_parameters)
 
 
-class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
+class BaggedRecursivePartitionClassifier(
+    ClassifierMixin, TransformerMixin, BaseEstimator
+):
     """An independently fitted, mean-probability bagging ensemble."""
 
     def __init__(
@@ -124,6 +127,47 @@ class BaggedRecursivePartitionClassifier(ClassifierMixin, BaseEstimator):
     def predict(self, X):
         probabilities = self.predict_proba(X)
         return self.classes_[np.argmax(probabilities, axis=1)]
+
+    def transform(self, X):
+        """Return a sparse node-incidence matrix for every ensemble member.
+
+        Each member contributes a separate horizontal block of columns. This
+        preserves member-local node IDs even though bootstrap members can have
+        different tree structures and numbers of fitted nodes.
+        """
+
+        check_is_fitted(self, "estimators_")
+        X = check_array(X, accept_sparse=["csr", "csc"], dtype=None)
+        if X.shape[1] != self.n_features_in_:
+            raise ValueError(f"X has {X.shape[1]} features, expected {self.n_features_in_}.")
+        paths = [estimator.transform(X) for estimator in self.estimators_]
+        return sparse.hstack(paths, format="csr")
+
+    def fit_transform(self, X, y, sample_weight=None, **fit_params):
+        """Fit the ensemble and return its sparse node-incidence matrix."""
+
+        if fit_params:
+            unexpected = ", ".join(sorted(fit_params))
+            raise TypeError(f"Unexpected fit parameters: {unexpected}")
+        return self.fit(X, y, sample_weight=sample_weight).transform(X)
+
+    def get_feature_names_out(self, input_features=None):
+        """Return names for the member-local node-ID columns."""
+
+        check_is_fitted(self, "estimators_")
+        if input_features is not None:
+            input_features = np.asarray(input_features, dtype=object)
+            if input_features.ndim != 1 or len(input_features) != self.n_features_in_:
+                raise ValueError(
+                    "input_features must have one entry for each input feature"
+                )
+        names = []
+        for member_id, estimator in enumerate(self.estimators_):
+            member_names = estimator.get_feature_names_out()
+            names.extend(
+                f"member_{member_id}_{name}" for name in member_names
+            )
+        return np.asarray(names, dtype=object)
 
     def _validate_options(self, n_samples):
         if not isinstance(self.n_estimators, (int, np.integer)) or self.n_estimators < 1:

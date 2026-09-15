@@ -124,7 +124,11 @@ from recursive_partition import (
 
 The classifiers support binary and multiclass targets, dense and compatible
 CSR/CSC inputs, and expose `fit`, `predict`, `predict_proba`, `apply`,
-`decision_path`, `get_depth`, and `get_n_leaves` where applicable. The package
+`decision_path`, `transform`, `fit_transform`, `get_feature_names_out`,
+`get_depth`, and `get_n_leaves` where applicable. `transform` returns the same
+CSR node-incidence matrix as `decision_path`: one row per sample and one column
+per fitted node, with a nonzero entry for every node traversed by that sample.
+The package
 also includes the self-contained `make_2d_dataset` and
 `plot_probability_heatmap` helpers used by the notebook. See
 `ARCHITECTURE.md` for stopping rules, probability modes, sample weights,
